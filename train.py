@@ -132,7 +132,7 @@ def main():
     train_loader = torch.utils.data.DataLoader(train_dataset,
                               batch_size=batch_size,
                               shuffle=True,
-                              collate_fn=active_vision_dataset.collate, num_workers=workers,
+                              collate_fn=active_vision_dataset.collate_fn, num_workers=workers,
                               pin_memory=True)
     """
    
