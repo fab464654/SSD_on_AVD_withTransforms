@@ -5,6 +5,7 @@ import json
 import cv2
 import collections
 
+import torch
 from PIL import Image
 from utils import transform
 
@@ -27,7 +28,7 @@ def collate(batch):
 
     return [images,labels]
 
-def collate_fn(self, batch):
+def collate_fn(batch):
       """
       Since each image may have a different number of objects, we need a collate function (to be passed to the DataLoader).
       This describes how to combine these tensors of different sizes. We use lists.
@@ -44,9 +45,10 @@ def collate_fn(self, batch):
       #In AVD format (and original AVD collate), labels contain boxes, labels, difficulties, so:
       for b in batch:
           images.append(b[0])
+          
 
           labels_avd = b[1]
-          box_id_diff = [b for b in labels_avd[j][0]]  
+          box_id_diff = [j for j in labels_avd[0]]  
         
           box = [l[0:4] for l in box_id_diff]
           #Boundary coordinates as requested
@@ -57,18 +59,21 @@ def collate_fn(self, batch):
             box[k][3] = box[k][3]/1080.0           
           boxes.append(box)
         
-          print("box: ",box)
-            
+          #print("box: ",box)
+
           label = [l[4] for l in box_id_diff]
-          print("label: "label)
-          #labels.append(b[1][4])
+          #print("label: ",label)
+
           labels.append(label)
             
+          
           diff = [l[5] for l in box_id_diff]
-          if diff > 3:
-            diff = 1
-          else
-            diff = 0
+          for m in range(len(diff)):
+            if diff[m] > 3:
+              diff[m] = 1
+            else:
+              diff[m] = 0
+
           #difficulties.append(b[1][5])
           difficulties.append(diff)
 
@@ -108,29 +113,7 @@ class AVD(object):
                           'Home_008_1'
     ]
 
-    #Collate function copied from the PascalVOCDataset class:
-    def __getitem__(self, i):
-        # Read image
-        image = Image.open(self.images[i], mode='r')
-        image = image.convert('RGB')
-
-        # Read objects in this image (bounding boxes, labels, difficulties)
-        objects = self.objects[i]
-        boxes = torch.FloatTensor(objects['boxes'])  # (n_objects, 4)
-        labels = torch.LongTensor(objects['labels'])  # (n_objects)
-        difficulties = torch.ByteTensor(objects['difficulties'])  # (n_objects)
-
-        # Discard difficult objects, if desired
-        if not self.keep_difficult:
-            boxes = boxes[1 - difficulties]
-            labels = labels[1 - difficulties]
-            difficulties = difficulties[1 - difficulties]
-
-        # Apply transformations
-        image, boxes, labels, difficulties = transform(image, boxes, labels, difficulties, split=self.split)
-
-        return image, boxes, labels, difficulties
-
+    
     
     def __init__(self, root, train=True, transform=None, target_transform=None, 
                  scene_list=None, classification=False, preload_images=False,
@@ -358,6 +341,7 @@ class AVD(object):
         self.images = images 
 
 
+        
 
 
     def __getitem__(self, index):
@@ -460,8 +444,67 @@ class AVD(object):
                 print(scene_name)
                 print(images_dir)
 
-            return [image_list,target_list]
+            #return [image_list,target_list]
+            
+            #CHANGES IN ORDER TO MATCH THE PASCAL GET ITEM FUNCTION:   
+            # Read image
+            boxesList = list()
+            labelList = list()
+            diffList = list()
+            batch_size = 9
+            for j in range(batch_size):
+              box_id_diff = [b for b in target_list[j][0]]      
+              
+              box = box_id_diff[0:4]
+              #box = [l[0:4] for l in box_id_diff]
+              print(box)
+              #Boundary coordinates as requested
+              for k in range(len(box)):  
+                box[k][0] = box[k][0]/1920.0
+                box[k][2] = box[k][2]/1920.0          
+                box[k][1] = box[k][1]/1080.0
+                box[k][3] = box[k][3]/1080.0 
 
+              box_tensor = torch.FloatTensor(box)        
+              boxesList.append(box_tensor)               
+
+              label = [l[4] for l in box_id_diff]
+              label_tensor = torch.LongTensor(label)            
+              labelList.append(label_tensor)        
+
+              diff = [l[5] for l in box_id_diff]
+              for m in range(len(diff)):
+                if diff[m] > 3:
+                  diff[m] = 1
+                else:
+                  diff[m] = 0
+
+              diff_tensor = torch.ByteTensor(diff)           
+              diffList.append(diff_tensor)
+
+              print(diffList.shape)
+
+
+              image = Image.open(self.image_list[index], mode='r')
+              image = image.convert('RGB')
+
+            # Read objects in this image (bounding boxes, labels, difficulties)
+            
+            boxes = torch.FloatTensor(annotations['boxes'])  # (n_objects, 4)
+            labels = torch.LongTensor(annotations['labels'])  # (n_objects)
+            difficulties = torch.ByteTensor(annotations['difficulties'])  # (n_objects)
+
+            # Discard difficult objects, if desired
+            """
+            if not self.keep_difficult:
+                boxes = boxes[1 - difficulties]
+                labels = labels[1 - difficulties]
+                difficulties = difficulties[1 - difficulties]
+            """
+            # Apply transformations
+            image, boxes, labels, difficulties = transform(image, boxes, labels, difficulties, split=self.split)
+
+            return image, boxes, labels, difficulties
 
         # #######################33 
         # by box 
