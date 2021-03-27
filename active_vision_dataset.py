@@ -5,6 +5,9 @@ import json
 import cv2
 import collections
 
+from PIL import Image
+from utils import transform
+
 images_dir = 'jpg_rgb'
 annotation_filename = 'annotations.json'
 
@@ -24,7 +27,56 @@ def collate(batch):
 
     return [images,labels]
 
+def collate_fn(self, batch):
+      """
+      Since each image may have a different number of objects, we need a collate function (to be passed to the DataLoader).
+      This describes how to combine these tensors of different sizes. We use lists.
+      Note: this need not be defined in this Class, can be standalone.
+      :param batch: an iterable of N sets from __getitem__()
+      :return: a tensor of images, lists of varying-size tensors of bounding boxes, labels, and difficulties
+      """
 
+      images = list()
+      boxes = list()
+      labels = list()
+      difficulties = list()
+
+      #In AVD format (and original AVD collate), labels contain boxes, labels, difficulties, so:
+      for b in batch:
+          images.append(b[0])
+
+          labels_avd = b[1]
+          box_id_diff = [b for b in labels_avd[j][0]]  
+        
+          box = [l[0:4] for l in box_id_diff]
+          #Boundary coordinates as requested
+          for k in range(len(box)):  
+            box[k][0] = box[k][0]/1920.0
+            box[k][2] = box[k][2]/1920.0          
+            box[k][1] = box[k][1]/1080.0
+            box[k][3] = box[k][3]/1080.0           
+          boxes.append(box)
+        
+          print("box: ",box)
+            
+          label = [l[4] for l in box_id_diff]
+          print("label: "label)
+          #labels.append(b[1][4])
+          labels.append(label)
+            
+          diff = [l[5] for l in box_id_diff]
+          if diff > 3:
+            diff = 1
+          else
+            diff = 0
+          #difficulties.append(b[1][5])
+          difficulties.append(diff)
+
+      images = torch.stack(images, dim=0)
+
+      return images, boxes, labels, difficulties  # tensor (N, 3, 300, 300), 3 lists of N tensors each
+
+    
 class AVD(object):
     """
     Organizes data from the Active Vision Dataset
@@ -79,44 +131,7 @@ class AVD(object):
 
         return image, boxes, labels, difficulties
 
-    def collate_fn(self, batch):
-      """
-      Since each image may have a different number of objects, we need a collate function (to be passed to the DataLoader).
-      This describes how to combine these tensors of different sizes. We use lists.
-      Note: this need not be defined in this Class, can be standalone.
-      :param batch: an iterable of N sets from __getitem__()
-      :return: a tensor of images, lists of varying-size tensors of bounding boxes, labels, and difficulties
-      """
-
-      images = list()
-      boxes = list()
-      labels = list()
-      difficulties = list()
-
-      #In AVD format (and original AVD collate), labels contain boxes, labels, difficulties, so:
-      for b in batch:
-          images.append(b[0])
-
-          labels = b[1]
-          box_id_diff = [b for b in labels[j][0]]  
-          box = [l[0:4] for l in box_id_diff]
-          #Boundary coordinates as requested
-          for k in range(len(box)):  
-            box[k][0] = box[k][0]/1920.0
-            box[k][2] = box[k][2]/1920.0          
-            box[k][1] = box[k][1]/1080.0
-            box[k][3] = box[k][3]/1080.0
-
-          boxes.append(box)
-
-          label = [l[4] for l in box_id_diff]
-          labels.append(b[1][4])
-          difficulties.append(b[1][5])
-
-      images = torch.stack(images, dim=0)
-
-      return images, boxes, labels, difficulties  # tensor (N, 3, 300, 300), 3 lists of N tensors each
-
+    
     def __init__(self, root, train=True, transform=None, target_transform=None, 
                  scene_list=None, classification=False, preload_images=False,
                  by_box=False, class_id_to_name=None, fraction_of_no_box=1,
