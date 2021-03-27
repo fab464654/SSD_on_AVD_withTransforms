@@ -88,7 +88,7 @@ def main():
                                                     'Home_011_1',
                                                     'Home_010_1',
                                                     'Office_001_1'],
-                                          fraction_of_no_box=-1)
+                                          fraction_of_no_box=-1, split='TRAIN')
 
     
     """         
@@ -193,141 +193,17 @@ def train(train_loader, model, criterion, optimizer, epoch):
 
     
     # Batches
-    for i, (images, labels) in enumerate(train_loader):
-
+    for i, (images, boxes, labels, difficulties) in enumerate(train_loader):
         
-        #Pre-processing:     
-         
-        from torchvision import transforms as transf
-        preprocess = transf.Compose([
-                      transf.ToPILImage(),
-                      transf.Resize(300),
-                      transf.CenterCrop(300),
-                      transf.ToTensor(),  
-                      transf.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-                  ])
-        
-        boxesList = list()
-        labelList = list()
-        diffList = list()
-        
-        for j in range(batch_size): 
-
-          if j == 0:              
-            input_tensor = preprocess(images[j])
-            input_tensor = input_tensor.unsqueeze(0)
-            input_batch = input_tensor
-          else:
-            input_tensor = preprocess(images[j])
-            #print(input_tensor)
-            input_tensor = input_tensor.unsqueeze(0) # create a mini-batch as expected by the model
-            #print(input_tensor.shape)
-            input_batch = torch.cat((input_batch, input_tensor), 0)
-            #print("shape images: ",input_batch.shape) 
-          
-          
-         
-          # In the Active Vision Dataset we have this formatting:
-          # [xmin ymin xmax ymax instance_id difficulty]
-            
-          """          From the Tutorial:           
-          Since the number of objects in any given image can vary, we can't use a fixed 
-          size tensor for storing the bounding boxes for the entire batch of N images.
-
-          Therefore, ground truth bounding boxes fed to the model must be a list of 
-          length N, where each element of the list is a Float tensor of dimensions
-          N_o, 4, where N_o is the number of objects present in that particular image.
-
-          Therefore, ground truth labels fed to the model must be a list of length N, 
-          where each element of the list is a Long tensor of dimensions N_o, where N_o 
-          is the number of objects present in that particular image.
-          """
-          #Prints to test
-          #print(j)
-          box_id_diff = [b for b in labels[j][0]]      
-          box = [l[0:4] for l in box_id_diff]
-
-          #print('before:',box) #To check
-
-          #Boundary coordinates as requested
-          for k in range(len(box)):  
-            box[k][0] = box[k][0]/1920.0
-            box[k][2] = box[k][2]/1920.0          
-            box[k][1] = box[k][1]/1080.0
-            box[k][3] = box[k][3]/1080.0 
-
-          #print('after:',box) #To check
-
-         
-          box_tensor = torch.FloatTensor(box)
+        data_time.update(time.time() - start)
 
           
-          if j == 0:            
-            box_list = [box_tensor]
-          else:
-            box_list.append(box_tensor)               
-
-          label = [l[4] for l in box_id_diff]
-          label_tensor = torch.LongTensor(label)
-          if j == 0: 
-            label_list = [label_tensor]
-          else:
-            label_list.append(label_tensor)        
-
-          diff = [l[5] for l in box_id_diff]
-          for m in range(len(diff)):
-            if diff[m] > 3:
-              diff[m] = 1
-            else:
-              diff[m] = 0
-
-          diff_tensor = torch.ByteTensor(diff)
-          if j == 0: 
-            diff_list = [diff_tensor]
-          else:
-            diff_list.append(diff_tensor)
-
-          # ------------------------------            
-          # Apply transformations TO TEST
-          # ------------------------------
-          """
-          from PIL import Image
-          print(images[j])
-          img = Image.fromarray(images[j])
-          """
-          from PIL import Image
-          from matplotlib import cm    
-          import numpy as np     
-          
-          im = Image.fromarray(images[j])     
-          
-          image, boxes, t_labels, difficulties = transform(im, box_tensor, label_tensor, diff_tensor, split='TRAIN')
-
-          if j == 0:    
-            image = image.unsqueeze(0)          
-            imageBatch = image
-          else:
-            image = image.unsqueeze(0)
-            imageBatch = torch.cat((imageBatch, image), 0)
-
-          boxesList.append(boxes.to(device))
-          labelList.append(t_labels.to(device))
-          diffList.append(difficulties.to(device))
-
-        #print("list of boxes:",box_list)
-        #print("list of labels:", label_list)
-        """
-        images = input_batch.to(device)  # (batch_size (N), 3, 300, 300)
-        print(images.shape)
-        boxes = box_list
-        labels = label_list
-        difficulties = diff_list
-        """
         # ------------------------------            
-        # Try to use the transformed stuff
+        # Try to use the "transformed" data (images + boxes, labels..)
         # ------------------------------
-        images = imageBatch.to(device)
-        boxes = boxesList
+        images = images.to(device)
+        boxes = [b.to(device) for b in boxes]
+        labels = [l.to(device) for l in labels]
 
         # Forward prop.        
         predicted_locs, predicted_scores = model(images)  # (N, 8732, 4), (N, 8732, n_classes)
@@ -337,7 +213,7 @@ def train(train_loader, model, criterion, optimizer, epoch):
         #print(predicted_scores.shape)  #correct  
 
         # Loss
-        loss = criterion(predicted_locs, predicted_scores, boxes, labelList)  # scalar
+        loss = criterion(predicted_locs, predicted_scores, boxes, labels)  # scalar
         
         # Backward prop.
         optimizer.zero_grad()
