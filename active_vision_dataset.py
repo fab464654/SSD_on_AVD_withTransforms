@@ -118,7 +118,7 @@ class AVD(object):
     def __init__(self, root, train=True, transform=None, target_transform=None, 
                  scene_list=None, classification=False, preload_images=False,
                  by_box=False, class_id_to_name=None, fraction_of_no_box=1,
-                 img_target_transform=None):
+                 img_target_transform=None, split=None): #added split = train or test
         """
         Create instance of AVDd class
 
@@ -170,7 +170,7 @@ class AVD(object):
         self.class_id_to_name = class_id_to_name 
         self.fraction_of_no_box = fraction_of_no_box       
         self.img_target_transform = img_target_transform
- 
+        self.split = split
         #if no inputted scene list, use defaults 
         if scene_list == None:
             if self.train:
@@ -379,6 +379,16 @@ class AVD(object):
                 else:
                     img = cv2.imread(os.path.join(self.root,scene_name, 
                                                    images_dir,name))
+
+               
+                """
+                TEST TO SEE IF THE CONVERSION IS RIGHT (BGR TO RGB)
+                cv2.imwrite("filename1.jpg", img)
+
+                img_new = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+                im_pil = Image.fromarray(img_new)         
+                im_pil.save("mod.jpeg")
+                """
                 
 
                 #get the target and apply transform
@@ -426,11 +436,15 @@ class AVD(object):
                 if not self.classification:
                     target.append(self.init_navs[name])
 
+                #Convert cv2 image to PIL image
+                img_new = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+                img = Image.fromarray(img_new) 
+                #------------------------------
                 image_target_list.append([img,target])
-                image_list.append(img)
+                image_list.append(img)                
                 target_list.append(target)
 
-
+            """
             #special case for single image/label
             if(len(image_target_list) == 1):
                 image_target_list = image_target_list[0]
@@ -443,11 +457,12 @@ class AVD(object):
                 print(self.root)
                 print(scene_name)
                 print(images_dir)
-
+            """
             #return [image_list,target_list]
             
             #CHANGES IN ORDER TO MATCH THE PASCAL GET ITEM FUNCTION:   
             # Read image
+
             boxesList = list()
             labelList = list()
             diffList = list()
@@ -455,9 +470,8 @@ class AVD(object):
             for j in range(batch_size):
               box_id_diff = [b for b in target_list[j][0]]      
               
-              box = box_id_diff[0:4]
-              #box = [l[0:4] for l in box_id_diff]
-              print(box)
+              box = [l[0:4] for l in box_id_diff]
+              #print(box)
               #Boundary coordinates as requested
               for k in range(len(box)):  
                 box[k][0] = box[k][0]/1920.0
@@ -482,29 +496,33 @@ class AVD(object):
               diff_tensor = torch.ByteTensor(diff)           
               diffList.append(diff_tensor)
 
-              print(diffList.shape)
+              
+              image = image_list[j]
 
-
-              image = Image.open(self.image_list[index], mode='r')
-              image = image.convert('RGB')
-
-            # Read objects in this image (bounding boxes, labels, difficulties)
+              # Read objects in this image (bounding boxes, labels, difficulties)
+              boxes = box_tensor
+              labels = label_tensor
+              difficulties = diff_tensor
+              #SEEMS CORRECT UNTIL HERE!
+              #print("box",boxes.shape, "label: ", labels.shape, "diff", difficulties.shape)
+              #print("fine")
+              """
+              boxes = torch.FloatTensor(annotations['boxes'])  # (n_objects, 4)
+              labels = torch.LongTensor(annotations['labels'])  # (n_objects)
+              difficulties = torch.ByteTensor(annotations['difficulties'])  # (n_objects)
+              """
+              
+              # Discard difficult objects, if desired
+              """
+              if not self.keep_difficult:
+                  boxes = boxes[1 - difficulties]
+                  labels = labels[1 - difficulties]
+                  difficulties = difficulties[1 - difficulties]
+              """
+              # Apply transformations
+              image, boxes, labels, difficulties = transform(image, boxes, labels, difficulties, split=self.split)
             
-            boxes = torch.FloatTensor(annotations['boxes'])  # (n_objects, 4)
-            labels = torch.LongTensor(annotations['labels'])  # (n_objects)
-            difficulties = torch.ByteTensor(annotations['difficulties'])  # (n_objects)
-
-            # Discard difficult objects, if desired
-            """
-            if not self.keep_difficult:
-                boxes = boxes[1 - difficulties]
-                labels = labels[1 - difficulties]
-                difficulties = difficulties[1 - difficulties]
-            """
-            # Apply transformations
-            image, boxes, labels, difficulties = transform(image, boxes, labels, difficulties, split=self.split)
-
-            return image, boxes, labels, difficulties
+              return image, boxes, labels, difficulties
 
         # #######################33 
         # by box 
