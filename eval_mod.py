@@ -69,6 +69,20 @@ def evaluate(test_loader, model):
         for i, (images, boxes, labels, difficulties) in enumerate(tqdm(test_loader, desc='Evaluating')):
           images = images.to(device)  # (N, 3, 300, 300)
           
+          """
+          #CODE TO SEE/SAVE THE ACTUAL IMAGES
+          from torchvision import transforms
+          x = images[0]
+          mean = [0.485, 0.456, 0.406]
+          std = [0.229, 0.224, 0.225]  
+          z = x * torch.tensor(std).to(device).view(3, 1, 1)
+          z = z + torch.tensor(mean).to(device).view(3, 1, 1)
+
+          trans = transforms.ToPILImage()
+          immagine = (trans(z).convert("RGB"))
+          immagine.save("image.jpg")
+          """
+          
           # Forward prop.
           predicted_locs, predicted_scores = model(images)
           print("  ", predicted_locs,"   ", predicted_scores)
